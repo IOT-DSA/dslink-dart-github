@@ -218,6 +218,41 @@ class AccountNode extends GitHubNode {
           }
         ]
       },
+      "getRepositoryCommits": {
+        r"$is": "getRepositoryCommits",
+        r"$name": "Get Repository Commits",
+        r"$invokable": "read",
+        r"$params": [
+          {
+            "name": "owner",
+            "type": "string",
+            "placeholder": "IOT-DSA"
+          },
+          {
+            "name": "repository",
+            "type": "string",
+            "placeholder": "sdk-dslink-dart"
+          },
+          {
+            "name": "count",
+            "type": "number"
+          }
+        ],
+        r"$columns": buildActionIO({
+          "authorLogin": "string",
+          "authorName": "string",
+          "committerLogin": "string",
+          "committerName": "string",
+          "additions": "number",
+          "deletions": "number",
+          "totalChanges": "number",
+          "files": "dynamic",
+          "url": "string",
+          "sha": "string",
+          "message": "string"
+        }),
+        r"$result": "table"
+      },
       "getUserRepositories": {
         r"$is": "getUserRepositories",
         r"$name": "Get User Repositories",
@@ -292,21 +327,21 @@ class AccountNode extends GitHubNode {
 
     String user = params["user"];
     return await github.repositories.listUserRepositories(user).map((repo) {
-      return {
-        "id": repo.id,
-        "name": repo.name,
-        "fullName": repo.fullName,
-        "language": repo.language,
-        "size": repo.size,
-        "defaultBranch": repo.defaultBranch,
-        "description": repo.description,
-        "stars": repo.stargazersCount,
-        "watchers": repo.watchersCount,
-        "hasIssues": repo.hasIssues,
-        "hasWiki": repo.hasWiki,
-        "homepage": repo.homepage,
-        "url": repo.htmlUrl
-      };
+      return [[
+        repo.id,
+        repo.name,
+        repo.fullName,
+        repo.language,
+        repo.size,
+        repo.defaultBranch,
+        repo.description,
+        repo.stargazersCount,
+        repo.watchersCount,
+        repo.hasIssues,
+        repo.hasWiki,
+        repo.homepage,
+        repo.htmlUrl
+      ]];
     }).toList();
   }
 
@@ -323,15 +358,51 @@ class AccountNode extends GitHubNode {
     }
 
     poller.start(onlyNew: isOnlyNew).listen((Event event) {
-      var json = JSON.encode(event.json);
+      var json = const JsonEncoder().convert(event.json);
 
-      controller.add({
-        "id": event.id,
-        "event": json
-      });
+      controller.add([event.id, json]);
     });
 
     return controller.stream;
+  }
+
+  getRepositoryCommits(Map<String, dynamic> params) {
+    String owner = params["owner"];
+    String repository = params["repository"];
+
+    if (owner is! String || repository is! String) {
+      throw new Exception("Invalid Parameters");
+    }
+
+    RepositorySlug slug = new RepositorySlug(owner, repository);
+
+    Stream<List> lists = github.repositories.listCommits(slug).map((RepositoryCommit commit) {
+      return [[
+        commit.author != null ? commit.author.login : null,
+        commit.author != null ? commit.author.name : null,
+        commit.committer != null ? commit.committer.login : null,
+        commit.committer != null ? commit.committer.name : null,
+        commit.stats == null ? 0 : commit.stats.additions,
+        commit.stats == null ? 0 : commit.stats.deletions,
+        commit.stats == null ? 0 : commit.stats.total,
+        commit.files == null ? [] : commit.files.map((file) => {
+          "name": file.name,
+          "changes": file.changes,
+          "status": file.status,
+          "blobUrl": file.blobUrl,
+          "rawUrl": file.rawUrl
+        }).toList(),
+        commit.htmlUrl,
+        commit.sha,
+        commit.commit.message
+      ]];
+    });
+
+    if (params["count"] is num) {
+      return lists.take((params["count"] as num).toInt());
+    }
+
+    return lists;
   }
 
   pollUserEvents(Map<String, dynamic> params) {
@@ -349,12 +420,9 @@ class AccountNode extends GitHubNode {
     }
 
     poller.start(onlyNew: isOnlyNew).listen((Event event) {
-      var json = JSON.encode(event.json);
+      var json = const JsonEncoder().convert(event.json);
 
-      controller.add({
-        "id": event.id,
-        "event": json
-      });
+      controller.add([event.id, json]);
     });
 
     return controller.stream;
@@ -516,6 +584,11 @@ main(List<String> args) async {
       var p = new Path(path);
       AccountNode node = link[p.parentPath];
       return new SimpleActionNode(path, node == null ? null : node.getUserRepositories);
+    },
+    "getRepositoryCommits": (String path) {
+      var p = new Path(path);
+      AccountNode node = link[p.parentPath];
+      return new SimpleActionNode(path, node == null ? null : node.getRepositoryCommits);
     }
   });
   link.init();
