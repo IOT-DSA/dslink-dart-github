@@ -280,6 +280,29 @@ class AccountNode extends GitHubNode {
           "url": "string"
         })
       },
+      "getContributorStatistics": {
+        r"$is": "getContributorStatistics",
+        r"$name": "Get Contributor Statistics",
+        r"$invokable": "read",
+        r"$params": [
+          {
+            "name": "owner",
+            "type": "string",
+            "placeholder": "IOT-DSA"
+          },
+          {
+            "name": "repository",
+            "type": "string",
+            "placeholder": "sdk-dslink-dart"
+          }
+        ],
+        r"$columns": buildActionIO({
+          "author": "string",
+          "avatarUrl": "string",
+          "commits": "number"
+        }),
+        r"$result": "table"
+      },
       RATE_LIMIT_REMAINING: createPoint("Rate Limit Remaining", "int"),
       RATE_LIMIT: createPoint("Rate Limit"," int")
     });
@@ -320,6 +343,22 @@ class AccountNode extends GitHubNode {
     setChildValue("email", user.email);
     setChildValue("avatarUrl", user.avatarUrl);
     setChildValue("url", user.htmlUrl);
+  }
+
+  getContributorStatistics(Map<String, dynamic> params) async* {
+    checkActionParameters(const ["owner", "repository"], params);
+
+    String owner = params["owner"];
+    String repository = params["repository"];
+    RepositorySlug slug = new RepositorySlug(owner, repository);
+    List<ContributorStatistics> stats = await github.repositories.listContributorStats(slug);
+    for (ContributorStatistics s in stats) {
+      yield [[
+        s.author.login,
+        s.author.avatarUrl,
+        s.total
+      ]];
+    }
   }
 
   getUserRepositories(Map<String, dynamic> params) async {
@@ -367,6 +406,8 @@ class AccountNode extends GitHubNode {
   }
 
   getRepositoryCommits(Map<String, dynamic> params) {
+    checkActionParameters(const ["owner", "repository"], params);
+
     String owner = params["owner"];
     String repository = params["repository"];
 
@@ -589,6 +630,11 @@ main(List<String> args) async {
       var p = new Path(path);
       AccountNode node = link[p.parentPath];
       return new SimpleActionNode(path, node == null ? null : node.getRepositoryCommits);
+    },
+    "getContributorStatistics": (String path) {
+      var p = new Path(path);
+      AccountNode node = link[p.parentPath];
+      return new SimpleActionNode(path, node == null ? null : node.getContributorStatistics);
     }
   });
   link.init();
