@@ -3,5 +3,4 @@ description: GitHub DSLink
 dependencies:
   dslink:
     git: https://github.com/IOT-DSA/sdk-dslink-dart.git
-  github:
-    git: https://github.com/DirectMyFile/github.dart.git
+  github: ^3.0.2
