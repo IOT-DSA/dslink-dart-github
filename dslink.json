@@ -6,7 +6,9 @@
   "engines": {
     "dart": ">=1.9.0"
   },
-  "getDependencies": [],
+  "getDependencies": [
+    "pub get"		
+  ],
   "configs": {
     "broker": {
       "type": "url"
